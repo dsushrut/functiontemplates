@@ -6,9 +6,6 @@ from time import sleep, time, strftime, localtime
 from multiprocessing.pool import ThreadPool as Pool
 import random
 
-#from Factories.log import get_logger
-#lgr = get_logger(__name__)
-
 import logging
 lgr = logging.getLogger('functiontemplate')
 lgr.setLevel(logging.DEBUG)
@@ -17,6 +14,7 @@ ch.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 lgr.addHandler(ch)
+
 
 def temp_print_msg_box(msg, indent=1, width=None, title=""):
     lines = msg.split('\n')
@@ -143,10 +141,8 @@ def exceptiondecorator(fundamentalfunction,outputdict,localdict,ignoreexception,
                     break
                 context_variables = tblast.tb_frame.f_locals
                 if 'functiontemplate.py' not in str(line) and 'testrunner.py' not in str(line):
-                    #exceptiondict['traceback'].append({'line':line,'context_variables':context_variables})
                     exceptiondict['traceback'].append({'line':line})
                 else:
-                    #exceptiondict['traceback'].append({'line':line,'context_variables':context_variables})
                     exceptiondict['traceback'].append({'line':line})
                 tblast=tblast.tb_next
             outputdict['hadexception']=[exceptiondict]
@@ -154,10 +150,8 @@ def exceptiondecorator(fundamentalfunction,outputdict,localdict,ignoreexception,
             lgr.debug(box_log(pformat(outputdict)))
             if exceptionhandler:
                 outputdict['exceptionhandler_output']={}
-                #resolved_handler= resolve_exec(exceptionhandler['function'],resolvedict)
                 resolved_exception_handler=exceptiondecorator(exceptionhandler['function'],outputdict['exceptionhandler_output'],localdict,ignoreexception,None, globaldict=globaldict)
                 o=resolved_exception_handler(*exceptionhandler['args'],**exceptionhandler['kwargs'])
-                #lgr.debug("Done")
             outputdict['output']=str(e)
             output=str(e)
         return output
@@ -187,19 +181,13 @@ def applydecos(fundamental_function, decolist,localdict=None, outputdict={}, glo
         msg.append("outputdict = %s" % pformat(outputdict))
         finalmsg = temp_print_msg_box("\n".join(msg), title="inside internalfunction of applydecos")
         lgr.debug("\n"+finalmsg)
-        #importpdb; pdb.set_trace();
-        #x = input("xxx:")
         int_decolist=decolist
         if callable(decolist):
             int_decolist=[decolist]
-        #int_decolist.append({'function':time_log_deco,'args':[outputdict],'kwargs':{}})
         for deco in int_decolist:
             if callable(deco):
                 finalfunction['f'] = deco(finalfunction['f'])
             else:
-                #savename=finalfunction['f'].__name__
-                #pprint(outputdict)
-                #x = input("inside applydecos:")
                 evaluateddeco_args, evaluatedeco_kwargs = resolve_args_kwargs(localdict,
                                                                               deco['args'], deco['kwargs'], globaldict=globaldict)
                 finalfunction['f'] = deco['function'](finalfunction['f'], *evaluateddeco_args, **evaluatedeco_kwargs)
@@ -269,15 +257,11 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                 else:
                     output['output'] = exceptiondecorator(f['function'],
                             output,localdict,f.get('ignoreexception', ignoreexception),f.get('exceptionhandler',exceptionhandler),globaldict=globaldict)(*f['args'],**f['kwargs'])
-        #exceptioncapturedecorator(functionforexception, outputdict=output, exceptionhandler=f.get('exceptionhandler',exceptionhandler))()
         functionforexception()
-        #output['endtime']=time()
-        #output['h_end']=strftime('%Y-%m-%d %H:%M:%S', localtime(output['endtime']))
-        #output['timetaken']=output['endtime']-output['starttime']
-        #lgr.debug("##### end run_id:%s" % run_id)
         return output
     result=None
     if parallel:
+        #lgr.debug("########################## parallel $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$44")
         pool=Pool(processes=len(functionlist))
         result = pool.map(onefunctionhandler, functionlist)
         pool.close()
@@ -293,7 +277,6 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
 
         if checkexception(oneoutput) and not f.get('ignoreexception',False) and not parallel:
             break
-    #outputdict['output']=outputlist
     lgr.debug("outputdict:"+box_log(pformat(outputdict), title="runfunctionlist end"))
     return outputdict
 
@@ -308,11 +291,12 @@ class functiongroup(object):
         self.__name__=name
         self.name=name
         self.functionlist=[]
+        self.nametofunctiondict={}
         self.decoratorlist=[]
         self.ignoreexception=False
         self.exceptionhandler=None
         self.parallel=False
-        self.sequence="SERIAL"
+        self.sequence=None
         self.defaultcondition_handler=None
         self.defaulttemplate=None
         self.results=[]
@@ -344,7 +328,6 @@ class functiongroup(object):
                     'args': kwargs.pop('conditionargs',[]),
                     'kwargs': kwargs.pop('conditionkwargs',{})}
         ignoreexception= kwargs.pop('ignoreexception',None)
-        #exceptionhandler = kwargs.pop('exceptionhandler',None)
         if 'exceptionhandler' in kwargs:
             internal_exceptionhandler = {'function': kwargs.pop('exceptionhandler'),
                     'args': kwargs.pop('exceptionargs',[]),
@@ -363,6 +346,7 @@ class functiongroup(object):
         self.functionlist.append(self.internal_gettaskdata(taskfunction,
             internal_template, internal_exceptionhandler,
             internal_conditionhandler, *args, **kwargs))
+        self.nametofunctiondict[self.functionlist[-1]['name']]=self.functionlist[-1]
     def add(self, taskfunction,
             *args, **kwargs):
         self.internal_addfunction(taskfunction,
@@ -372,7 +356,8 @@ class functiongroup(object):
         pass
     def getor(self):
         pass
-    def __call__(self,taskfunction,localdict=None,outputdict=None, parallel=None, ignoreexception=None,exceptionhandler=None,globaldict=None, **kwargs):
+    def __call__(self,taskfunction,localdict=None,outputdict=None, parallel=None, ignoreexception=None,exceptionhandler=None,globaldict=None,sequence=None,
+            randomize=None, **kwargs):
         if ignoreexception==None:
             ignoreexception=self.ignoreexception
         if parallel==None:
@@ -388,6 +373,10 @@ class functiongroup(object):
         if globaldict==None:
             globaldict=localdict
         functionlist=self.functionlist[:]
+        if sequence:
+            functionlist=[self.nametofunctiondict[x] for x in sequence]
+        if randomize:
+            functionlist=random.sample(functionlist,len(functionlist))
         outputcopy=True
         if not taskfunction:
             taskfunction = deco_of_runfunctionlist(functionlist, localdict, name=self.name, outputdict=outputdict,
@@ -421,8 +410,6 @@ class decoratorgroup(object):
         self.exceptionhandler=None
         self.defaultconditionhandler=None
         self.resolvedict={}
-    #def adddecorator(self):
-    #    pass
     def adddecorator(self, taskfunction, *args, **kwargs):
         internal_conditionhandler=self.defaultconditionhandler
         if 'condition' in kwargs:
@@ -434,7 +421,6 @@ class decoratorgroup(object):
             'condition':internal_conditionhandler}
         self.decoratorlist.append(taskdata)
     def run(self, taskfunction, outputdict=None, resolvedict=None, ignoreexception=None, exceptionhandler=None, **kwargs):
-        ##importpdb; pdb.set_trace();
         msg = []
         msg.append("taskfunction %s" % pformat(taskfunction))
         msg.append("resolvedict = %s" % pformat(resolvedict))
@@ -471,7 +457,8 @@ class functiontemplate(functiongroup):
         self.prefunctions = functiongroup(name = self.name+"-prefunctions")
         self.tasks = functiongroup(name = self.name+"-tasks")
         self.postfunctions = functiongroup(name = self.name+"-postfunctions")
-    def __call__(self,taskfunction,localdict=None,outputdict=None, parallel=None, ignoreexception=None,exceptionhandler=None,globaldict=None, **kwargs):
+    def __call__(self,taskfunction,localdict=None,outputdict=None, parallel=None, ignoreexception=None,exceptionhandler=None,globaldict=None,
+            sequence=None, randomize=None, **kwargs):
         if outputdict==None:
             outputdict={}
         self.results.append(outputdict)
@@ -484,7 +471,7 @@ class functiontemplate(functiongroup):
             globaldict=localdict
         def prepost(*args,**kwargs):
             outputdict['001-prefunctions']={}
-            temp_output=self.prefunctions.run(localdict=localdict,outputdict=outputdict['001-prefunctions'], parallel=parallel, globaldict=globaldict,
+            temp_output=self.prefunctions.run(localdict=localdict,outputdict=outputdict['001-prefunctions'], globaldict=globaldict,
                     ignoreexception=ignoreexception,exceptionhandler=exceptionhandler)
             problems = checkexception(outputdict['001-prefunctions'])
             if problems:
@@ -492,13 +479,14 @@ class functiontemplate(functiongroup):
                     return outputdict
             outputdict['002-centraltasks']={}
             temp_output=self.tasks(taskfunction,localdict=localdict,outputdict=outputdict['002-centraltasks'], parallel=parallel,globaldict=globaldict,
+                    sequence=sequence,randomize=randomize,
                     ignoreexception=ignoreexception,exceptionhandler=exceptionhandler, **kwargs)(*args,**kwargs)
             problems = checkexception(outputdict['002-centraltasks'])
             if problems:
                 if not problems[0].get('ignoreexception', ignoreexception):
                     return outputdict
             outputdict['003-postfunctions']={}
-            temp_output=self.postfunctions.run(localdict=localdict,outputdict=outputdict['003-postfunctions'], parallel=parallel,globaldict=globaldict,
+            temp_output=self.postfunctions.run(localdict=localdict,outputdict=outputdict['003-postfunctions'],globaldict=globaldict,
                     ignoreexception=ignoreexception,exceptionhandler=exceptionhandler)
             return outputdict
         decorated_function = exceptiondecorator(applydecos(prepost, self.decoratorlist,localdict=localdict, outputdict=outputdict,globaldict=globaldict),
