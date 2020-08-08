@@ -287,9 +287,10 @@ def deco_of_runfunctionlist(functionlist,localdict,outputdict,name='default',par
     return internalfunction
 
 class functiongroup(object):
-    def __init__(self,name = "default"):
+    def __init__(self,name = "default", **kwargs):
         self.__name__=name
         self.name=name
+        self.data=kwargs
         self.functionlist=[]
         self.nametofunctiondict={}
         self.decoratorlist=[]
@@ -369,6 +370,7 @@ class functiongroup(object):
             localdict=outputdict
         if 'data' not in localdict:
             localdict['data']={}
+        localdict['data'].update(self.data)
         localdict['data'].update(kwargs)
         if globaldict==None:
             globaldict=localdict
@@ -393,6 +395,7 @@ class functiongroup(object):
             localdict=outputdict
         if 'data' not in localdict:
             localdict['data']={}
+        localdict['data'].update(self.data)
         localdict['data'].update(kwargs)
         if globaldict==None:
             globaldict=localdict
@@ -466,6 +469,7 @@ class functiontemplate(functiongroup):
             localdict=outputdict
         if 'data' not in localdict:
             localdict['data']={}
+        localdict['data'].update(self.data)
         localdict['data'].update(kwargs)
         if globaldict==None:
             globaldict=localdict
@@ -502,6 +506,7 @@ class functiontemplate(functiongroup):
             localdict=outputdict
         if 'data' not in localdict:
             localdict['data']={}
+        localdict['data'].update(self.data)
         localdict['data'].update(kwargs)
         if globaldict==None:
             globaldict=localdict
