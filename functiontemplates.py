@@ -99,6 +99,7 @@ def resolve_exec(fundamentalfunction,localdict, globaldict={}):
     def internalfunction(*args,**kwargs):
         evaluated_args, evaluated_kwargs = resolve_args_kwargs(localdict,args,kwargs, globaldict=globaldict)
         return fundamentalfunction(*evaluated_args,**evaluated_kwargs)
+    internalfunction.__name__=fundamentalfunction.__name__
     return internalfunction
 
 def time_log_deco(fundamentalfunction, outputdict):
@@ -114,6 +115,7 @@ def time_log_deco(fundamentalfunction, outputdict):
         outputdict['h_end']=strftime('%Y-%m-%d %H:%M:%S', localtime(outputdict['endtime']))
         lgr.debug("##### end run_id:%s" % outputdict['run_id'])
         return output
+    internalfunction.__name__=fundamentalfunction.__name__
     return internalfunction
 
 def resolve_time_deco(fundamentalfunction,outputdict,localdict,  globaldict={}):
@@ -155,6 +157,7 @@ def exceptiondecorator(fundamentalfunction,outputdict,localdict,ignoreexception,
             outputdict['output']=str(e)
             output=str(e)
         return output
+    internalfunction.__name__=fundamentalfunction.__name__
     return time_log_deco(internalfunction,outputdict)
 
 def applydecos(fundamental_function, decolist,localdict=None, outputdict={}, globaldict={}):
@@ -194,7 +197,7 @@ def applydecos(fundamental_function, decolist,localdict=None, outputdict={}, glo
                 finalfunction['f'].__name__=fundamental_function.__name__
 
         return finalfunction['f'](*args, **kwargs)
-    internalfunction.__name__=fundamental_function.__name__+"-applydecos"
+    internalfunction.__name__=fundamental_function.__name__
     return internalfunction
 
 
@@ -216,7 +219,12 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                 output['output'] = f()
             else:
                 #output = {}
+                def dummy_function(*args,**kwargs):
+                    if isinstance(f['function'], functiontemplate) or isinstance(f['function'], functiongroup):
+                        return f['function'].run(*args,**kwargs)
+                    return f['function'](*args,**kwargs)
                 output['name']=f.get('name',f['function'].__name__)
+                dummy_function.__name__=output['name']
                 if 'condition' in f:
                     if f['condition']:
                         if isinstance(f['condition']['function'],str):
@@ -235,8 +243,8 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                     if f['template']:
                         if not isinstance(f['template'],list):
                             f['template'] = [f['template']]
-                        finalfunction= f['function']
-                        name = f.get('name',f['function'].__name__)
+                        finalfunction= dummy_function
+                        name = output['name']
                         for onetemplate in f['template']:
                             if callable(onetemplate):
                                 onetemplate= {"function":onetemplate,
@@ -244,18 +252,23 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                             evaluatedtemplate_args, evaluatedtemplate_kwargs = resolve_args_kwargs(localdict,
                                     onetemplate['args'], onetemplate['kwargs'],globaldict=globaldict)
                             temp_output={'starttime':time(), 'ignoreexception':f.get('ignoreexception',ignoreexception)}
-                            finalfunction = onetemplate['function'](finalfunction,*evaluatedtemplate_args,
+                            if isinstance(onetemplate['function'], functiontemplate) or isinstance(f['function'], functiongroup):
+                                finalfunction = onetemplate['function'](finalfunction,*evaluatedtemplate_args,
                                     name=name,outputdict=temp_output,localdict=None,globaldict=globaldict,
                                     ignoreexception=f.get('ignoreexception', ignoreexception),
                                     exceptionhandler=f.get('exceptionhandler',exceptionhandler),
                                     **evaluatedtemplate_kwargs)
+                            else:
+                                finalfunction = onetemplate['function'](finalfunction,*evaluatedtemplate_args,
+                                        **evaluatedtemplate_kwargs)
+                            finalfunction.__name__=name
                         output['output'] = exceptiondecorator(finalfunction,
                                 output,localdict,f.get('ignoreexception', ignoreexception),f.get('exceptionhandler',exceptionhandler),globaldict=globaldict)(*f['args'],**f['kwargs'])
                     else:
-                        output['output'] = exceptiondecorator(f['function'],
+                        output['output'] = exceptiondecorator(dummy_function,
                                 output,localdict,f.get('ignoreexception', ignoreexception),f.get('exceptionhandler',exceptionhandler), globaldict=globaldict)(*f['args'],**f['kwargs'])
                 else:
-                    output['output'] = exceptiondecorator(f['function'],
+                    output['output'] = exceptiondecorator(dummy_function,
                             output,localdict,f.get('ignoreexception', ignoreexception),f.get('exceptionhandler',exceptionhandler),globaldict=globaldict)(*f['args'],**f['kwargs'])
         functionforexception()
         return output
@@ -493,6 +506,10 @@ class functiontemplate(functiongroup):
             temp_output=self.postfunctions.run(localdict=localdict,outputdict=outputdict['003-postfunctions'],globaldict=globaldict,
                     ignoreexception=ignoreexception,exceptionhandler=exceptionhandler)
             return outputdict
+        if taskfunction:
+            prepost.__name__ = taskfunction.__name__
+        else:
+            prepost.__name__ = self.name
         decorated_function = exceptiondecorator(applydecos(prepost, self.decoratorlist,localdict=localdict, outputdict=outputdict,globaldict=globaldict),
                 outputdict, localdict, ignoreexception, exceptionhandler,outputcopy=False,globaldict=globaldict)
         decorated_function.__name__=self.name
