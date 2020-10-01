@@ -5,7 +5,7 @@ from pprint import pprint, pformat
 from time import sleep, time, strftime, localtime
 from multiprocessing.pool import ThreadPool as Pool
 import random
-
+from copy import deepcopy
 import logging
 lgr = logging.getLogger('functiontemplate')
 lgr.setLevel(logging.DEBUG)
@@ -226,9 +226,18 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                 output['name']=f.get('name',f['function'].__name__)
                 dummy_function.__name__=output['name']
                 if 'condition' in f:
-                    if f['condition']:
+                    if isinstance(f['condition'],bool):
+                        if not f['condition']:
+                            lgr.debug("condition false for %s" % pformat(f))
+                            return
+                    elif f['condition']:
                         if isinstance(f['condition']['function'],str):
                             if not resolver_(f['condition']['function'], localdict):
+                                lgr.debug("condition false for %s" % pformat(f))
+                                return
+                        elif isinstance(f['condition']['function'],bool):
+                            if not f['condition']['function']:
+                                lgr.debug("condition false for %s" % pformat(f))
                                 return
                         else:
                             evaluatedcondition_args, evaluatedcondition_kwargs = resolve_args_kwargs(localdict,
@@ -236,6 +245,7 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                             output['conditionoutput'] = f['condition']['function'](*evaluatedcondition_args,
                                      **evaluatedcondition_kwargs)
                             if not output['conditionoutput']:
+                                lgr.debug("condition false for %s" %  pformat(f))
                                 return
                 evaluated_args, evaluated_kwargs = resolve_args_kwargs(localdict,
                         f['args'], f['kwargs'], globaldict=globaldict)
@@ -249,10 +259,12 @@ def runfunctionlist(functionlist,localdict,outputdict, parallel=False, ignoreexc
                             if callable(onetemplate):
                                 onetemplate= {"function":onetemplate,
                                         "args":[], "kwargs":{}}
+                            onetemplate_args=onetemplate.get("args",[])
+                            onetemplate_kwargs=onetemplate.get('kwargs',{k:v for k,v in onetemplate.items() if k not in ['args','kwargs','function']})
                             evaluatedtemplate_args, evaluatedtemplate_kwargs = resolve_args_kwargs(localdict,
-                                    onetemplate['args'], onetemplate['kwargs'],globaldict=globaldict)
+                                    onetemplate_args, onetemplate_kwargs,globaldict=globaldict)
                             temp_output={'starttime':time(), 'ignoreexception':f.get('ignoreexception',ignoreexception)}
-                            if isinstance(onetemplate['function'], functiontemplate) or isinstance(f['function'], functiongroup):
+                            if isinstance(onetemplate['function'], functiontemplate) or isinstance(onetemplate['function'], functiongroup):
                                 finalfunction = onetemplate['function'](finalfunction,*evaluatedtemplate_args,
                                     name=name,outputdict=temp_output,localdict=None,globaldict=globaldict,
                                     ignoreexception=f.get('ignoreexception', ignoreexception),
@@ -304,6 +316,7 @@ class functiongroup(object):
         self.__name__=name
         self.name=name
         self.data=kwargs
+        self.data['self']=self
         self.functionlist=[]
         self.nametofunctiondict={}
         self.decoratorlist=[]
@@ -315,6 +328,13 @@ class functiongroup(object):
         self.defaulttemplate=None
         self.results=[]
         self.resolvedict={}
+    def clone(self,*args,**kwargs):
+        myclone = deepcopy(self)
+        name = kwargs.pop("name",self.name)
+        myclone.name=name
+        myclone.data['self']=myclone
+        myclone.data.update(**kwargs)
+        return myclone
     def adddecorator(self, taskfunction, *args, **kwargs):
         internal_conditionhandler=self.defaultcondition_handler
         if 'condition' in kwargs:
@@ -325,6 +345,8 @@ class functiongroup(object):
             'args':args,'kwargs': kwargs,
             'condition':internal_conditionhandler}
         self.decoratorlist.append(taskdata)
+    def get_function_names(self):
+        return [x['name'] for x in self.functionlist]
     def internal_gettaskdata(self, taskfunction,
             internal_template, internal_exceptionhandler,
             internal_conditionhandler, *args, **kwargs):
@@ -348,6 +370,7 @@ class functiongroup(object):
                     'kwargs': kwargs.pop('exceptionkwargs',{})}
         taskdata={'function': taskfunction,
             'args':args,'kwargs': kwargs, 'name':name,
+            'condition':internal_conditionhandler,
             'template':internal_template}
         if ignoreexception!=None:
             taskdata['ignoreexception']=ignoreexception
@@ -473,6 +496,9 @@ class functiontemplate(functiongroup):
         self.prefunctions = functiongroup(name = self.name+"-prefunctions")
         self.tasks = functiongroup(name = self.name+"-tasks")
         self.postfunctions = functiongroup(name = self.name+"-postfunctions")
+        self.data['ft_self']=self
+    def update_data(self,*args,**kwargs):
+        self.data.update(**kwargs)
     def __call__(self,taskfunction,localdict=None,outputdict=None, parallel=None, ignoreexception=None,exceptionhandler=None,globaldict=None,
             sequence=None, randomize=None, **kwargs):
         if outputdict==None:
